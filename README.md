@@ -106,17 +106,19 @@ Applies HLG HDR → SDR color correction to an entire IMAGE batch. Converts iPho
 ## Pipo Align Composite
 **Category:** `fae/video`
 
-Aligns a Seedance-generated video to the original source video using SIFT feature matching, then composites a segmented Pipo mask over the original frames. Fixes the coordinate-space offset that occurs when Seedance shifts or scales the scene relative to the reference footage.
+Aligns a Seedance-generated video to the original source video using SIFT feature matching, then composites Pipo over the original frames. Computes the homography once from `generated_frames` → `original_frames` and optionally reuses it for a second GP outline layer — so fill and outline are aligned in a single pass without running feature matching twice.
 
 **Inputs**
 | Input | Description |
 |---|---|
 | `original_frames` | Source video frames (the real background) |
-| `generated_frames` | Seedance-generated frames containing Pipo |
+| `generated_frames` | Seedance-generated frames containing Pipo (used for alignment) |
 | `pipo_mask` | Segmentation mask isolating Pipo (from SAM2/SAM3) |
+| `gp_frames` | *(optional)* Blender GP Trace rendered frames (outline layer) |
+| `gp_mask` | *(optional)* Alpha mask from Blender GP Trace |
 | `max_features` | Max SIFT features to detect |
 | `match_count` | Number of feature matches to use for homography |
 | `feather_px` | Edge feathering on the mask for a smoother composite |
 
 **Outputs**
-- `composited` — Pipo composited onto the original background, per frame
+- `composited` — Pipo fill (and GP outline if connected) composited onto the original background, per frame
