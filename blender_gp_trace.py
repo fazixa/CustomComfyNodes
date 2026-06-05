@@ -19,17 +19,26 @@ import os
 
 argv  = sys.argv
 args  = argv[argv.index("--") + 1:]
-frames_dir    = args[0]
-output_dir    = args[1]
-blend_file    = args[2]
-img_w         = int(args[3])
-img_h         = int(args[4])
-fps           = float(args[5])
-n_frames      = int(args[6])
-threshold     = float(args[7])
-fill_color    = json.loads(args[8])
-stroke_radius = float(args[9])
-stroke_color  = json.loads(args[10])
+frames_dir       = args[0]
+output_dir       = args[1]
+blend_file       = args[2]
+img_w            = int(args[3])
+img_h            = int(args[4])
+fps              = float(args[5])
+n_frames         = int(args[6])
+threshold        = float(args[7])
+fill_color       = json.loads(args[8])
+stroke_radius    = float(args[9])
+stroke_color     = json.loads(args[10])
+show_fill        = args[11] == "True"
+noise_factor     = float(args[12])
+noise_strength   = float(args[13])
+noise_thickness  = float(args[14])
+noise_uvs        = float(args[15])
+noise_scale      = float(args[16])
+noise_offset     = float(args[17])
+noise_seed       = int(args[18])
+noise_step       = int(args[19])
 
 # ── Scene ─────────────────────────────────────────────────────────────────────
 bpy.ops.object.select_all(action="SELECT")
@@ -97,9 +106,30 @@ for mat in gp_obj.data.materials:
     if mat and mat.is_grease_pencil:
         gp_mat = mat.grease_pencil
         gp_mat.fill_color  = tuple(fill_color)
-        gp_mat.show_fill   = True
+        gp_mat.show_fill   = show_fill
         gp_mat.color       = tuple(stroke_color)
         gp_mat.show_stroke = True
+
+# ── Noise modifier (modifiers.new avoids GPU hang in background mode) ─────────
+noise_mod = gp_obj.modifiers.new("Noise", "GREASE_PENCIL_NOISE")
+noise_mod.factor           = noise_factor
+noise_mod.factor_strength  = noise_strength
+noise_mod.factor_thickness = noise_thickness
+noise_mod.factor_uvs       = noise_uvs
+noise_mod.noise_scale      = noise_scale
+noise_mod.seed             = noise_seed
+noise_mod.use_random       = False
+
+# Stepped keyframes: hold N frames then snap (handboiled boil effect)
+for f in range(1, n_frames + 1):
+    hold = (f - 1) // noise_step
+    noise_mod.noise_offset = noise_offset + hold * 0.3
+    noise_mod.keyframe_insert(data_path="noise_offset", frame=f)
+
+if gp_obj.animation_data and gp_obj.animation_data.action:
+    for fc in gp_obj.animation_data.action.fcurves:
+        for kp in fc.keyframe_points:
+            kp.interpolation = "CONSTANT"
 
 # ── Camera ────────────────────────────────────────────────────────────────────
 cam_data = bpy.data.cameras.new("Camera")
@@ -138,11 +168,20 @@ class BlenderGPTraceNode:
         return {
             "required": {
                 "images":          ("IMAGE",),
-                "fps":             ("FLOAT",  {"default": 12.0, "min": 1.0, "max": 120.0, "step": 0.5}),
-                "threshold":       ("FLOAT",  {"default": 0.5,  "min": 0.0, "max": 1.0,   "step": 0.01}),
+                "fps":             ("FLOAT",  {"default": 12.0, "min": 1.0,    "max": 120.0, "step": 0.5}),
+                "threshold":       ("FLOAT",  {"default": 0.5,  "min": 0.0,    "max": 1.0,   "step": 0.01}),
                 "fill_color":      ("STRING", {"default": "#601A3B"}),
                 "stroke_color":    ("STRING", {"default": "#FFFFFF"}),
-                "stroke_radius":   ("FLOAT",  {"default": 0.05, "min": 0.001, "max": 1.0, "step": 0.001}),
+                "stroke_radius":   ("FLOAT",  {"default": 0.05,  "min": 0.001, "max": 1.0,   "step": 0.001}),
+                "show_fill":       ("BOOLEAN",{"default": False, "tooltip": "Only enable for silhouette/mask input — hangs on line art"}),
+                "noise_factor":    ("FLOAT",  {"default": 0.003, "min": 0.0,   "max": 0.05,  "step": 0.001, "tooltip": "Position wobble — scene is 1 unit tall, keep small"}),
+                "noise_strength":  ("FLOAT",  {"default": 0.0,   "min": 0.0,   "max": 1.0,   "step": 0.01}),
+                "noise_thickness": ("FLOAT",  {"default": 0.0,   "min": 0.0,   "max": 1.0,   "step": 0.01}),
+                "noise_uvs":       ("FLOAT",  {"default": 0.0,   "min": 0.0,   "max": 1.0,   "step": 0.01}),
+                "noise_scale":     ("FLOAT",  {"default": 10.0,  "min": 0.0,   "max": 100.0, "step": 0.5,  "tooltip": "Higher = smoother wobble along stroke"}),
+                "noise_offset":    ("FLOAT",  {"default": 0.0,   "min": 0.0,   "max": 100.0, "step": 0.1}),
+                "noise_seed":      ("INT",    {"default": 1,     "min": 0,     "max": 9999}),
+                "noise_step":      ("INT",    {"default": 3,     "min": 1,     "max": 60,    "tooltip": "Frames per noise hold — lower = slower boil"}),
                 "blend_save_path": ("STRING", {"default": os.path.expanduser("~/Documents/ComfyUI_Blender")}),
             }
         }
@@ -152,7 +191,9 @@ class BlenderGPTraceNode:
     FUNCTION = "trace"
     CATEGORY = "fae/blender"
 
-    def trace(self, images, fps, threshold, fill_color, stroke_color, stroke_radius, blend_save_path):
+    def trace(self, images, fps, threshold, fill_color, stroke_color, stroke_radius,
+              show_fill, noise_factor, noise_strength, noise_thickness, noise_uvs,
+              noise_scale, noise_offset, noise_seed, noise_step, blend_save_path):
         n, h, w, c = images.shape
         imgs_np = images.cpu().numpy()
         _log = logging.getLogger(__name__)
@@ -200,6 +241,9 @@ class BlenderGPTraceNode:
                 json.dumps(fill_rgba),
                 str(stroke_radius),
                 json.dumps(stroke_rgba),
+                str(show_fill),
+                str(noise_factor), str(noise_strength), str(noise_thickness), str(noise_uvs),
+                str(noise_scale), str(noise_offset), str(noise_seed), str(noise_step),
             ]
             rc, log = _run(setup_cmd)
             if rc != 0:
