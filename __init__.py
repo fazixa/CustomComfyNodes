@@ -3,6 +3,7 @@ from .pink_extractor import PinkExtractorNode
 from .blender_gp_trace import BlenderGPTraceNode
 from .iphone_frame import iPhoneVideoFrameNode, iPhoneHLGCorrectNode
 from .pipo_align_composite import PipoAlignCompositeNode
+from .boil_effect import BoilEffectNode
 
 NODE_CLASS_MAPPINGS = {
     "VideoChangeFramerate": VideoChangeFramerateNode,
@@ -11,6 +12,7 @@ NODE_CLASS_MAPPINGS = {
     "iPhoneVideoFrame": iPhoneVideoFrameNode,
     "iPhoneHLGCorrect": iPhoneHLGCorrectNode,
     "PipoAlignComposite": PipoAlignCompositeNode,
+    "BoilEffect": BoilEffectNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -20,6 +22,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "iPhoneVideoFrame": "iPhone Video Frame",
     "iPhoneHLGCorrect": "iPhone HLG Correct",
     "PipoAlignComposite": "Pipo Align & Composite",
+    "BoilEffect": "Boil Effect",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
