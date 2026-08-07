@@ -18,9 +18,12 @@ Detects and extracts a pink-colored subject from an image or video batch using H
 | `sat_min / sat_max` | Saturation bounds |
 | `val_min / val_max` | Value (brightness) bounds |
 | `erosion` | Noise removal passes (0–4) |
-| `outline_width` | Width of the drawn outline in pixels |
+| `outline_width` | Outline width in pixels (when `dynamic_outline` is on, this is the width at Pipo's largest/closest frame) |
 | `sharpness` | Sobel edge sharpness for the outline |
 | `outline_color` | Hex color for the outline stroke |
+| `dynamic_outline` | Scale outline width by Pipo's mask size — thinner when farther from camera |
+| `min_scale` | *(shown when `dynamic_outline` is on)* Smallest fraction of `outline_width` used at Pipo's smallest size |
+| `smoothing` | *(shown when `dynamic_outline` is on)* Temporal smoothing on the size-based scale, 0–0.95 |
 
 **Outputs**
 - `mask` — Binary mask, white where pink was detected
@@ -114,11 +117,37 @@ Aligns a Seedance-generated video to the original source video using SIFT featur
 | `original_frames` | Source video frames (the real background) |
 | `generated_frames` | Seedance-generated frames containing Pipo (used for alignment) |
 | `pipo_mask` | Segmentation mask isolating Pipo (from SAM2/SAM3) |
+| `boiled_frames` | *(optional)* Boil Effect output — used as composite source instead of `generated_frames`. `generated_frames` still used for SIFT alignment |
 | `gp_frames` | *(optional)* Blender GP Trace rendered frames (outline layer) |
 | `gp_mask` | *(optional)* Alpha mask from Blender GP Trace |
 | `max_features` | Max SIFT features to detect |
 | `match_count` | Number of feature matches to use for homography |
-| `feather_px` | Edge feathering on the mask for a smoother composite |
+| `feather_px` | Edge feathering on the mask, shared by both outputs |
 
 **Outputs**
 - `composited` — Pipo fill (and GP outline if connected) composited onto the original background, per frame
+- `pipo_layer` — Pipo's source layer (`boiled_frames`/`generated_frames`) repositioned by the same SIFT homography, as RGBA with alpha = the warped & feathered `pipo_mask`. Connect to Save Image to export transparent PNGs
+
+---
+
+## Pipo Align Restore
+**Category:** `fae/video`
+
+The opposite of Pipo Align Composite: instead of placing generated content onto the original, it patches part of the **generated** video back with content from the **original** video. Computes the homography from `original_frames` → `generated_frames` using SIFT, warps the original into the generated frame's perspective, then composites it into the region defined by `mask`.
+
+`mask` is excluded from feature matching on `generated_frames` (its content doesn't correspond to the original there, by definition). `exclude_mask` is excluded from feature matching on `original_frames`, for any regions in the source video that shouldn't be used for alignment.
+
+**Inputs**
+| Input | Description |
+|---|---|
+| `original_frames` | Source video frames to restore from |
+| `generated_frames` | Generated frames to patch (used for alignment) |
+| `mask` | Region of `generated_frames` to replace with aligned original content. Excluded from SIFT features on `generated_frames` |
+| `exclude_mask` | *(optional)* Region of `original_frames` excluded from SIFT features |
+| `max_features` | Max SIFT features to detect |
+| `match_count` | Number of feature matches to use for homography |
+| `feather_px` | Edge feathering on the mask |
+
+**Outputs**
+- `composited` — `generated_frames` with `mask` region replaced by aligned `original_frames` content, per frame
+- `restored_layer` — The aligned original content on its own, as RGBA with alpha = the warped & feathered `mask`. Connect to Save Image to export transparent PNGs

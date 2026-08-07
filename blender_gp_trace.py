@@ -31,15 +31,6 @@ fill_color       = json.loads(args[8])
 stroke_radius    = float(args[9])
 stroke_color     = json.loads(args[10])
 show_fill        = args[11] == "True"
-noise_factor     = float(args[12])
-noise_strength   = float(args[13])
-noise_thickness  = float(args[14])
-noise_uvs        = float(args[15])
-noise_scale      = float(args[16])
-noise_offset     = float(args[17])
-noise_seed       = int(args[18])
-noise_step       = int(args[19])
-noise_random     = args[20] == "True"
 
 # ── Scene ─────────────────────────────────────────────────────────────────────
 bpy.ops.object.select_all(action="SELECT")
@@ -54,9 +45,12 @@ scene.frame_end            = n_frames
 scene.render.film_transparent = True
 scene.render.image_settings.color_mode = "RGBA"
 scene.render.image_settings.file_format = "PNG"
-scene.render.engine = "BLENDER_WORKBENCH"
-scene.display.shading.light = "FLAT"
-scene.display.shading.color_type = "MATERIAL"
+scene.render.engine = "BLENDER_EEVEE"
+scene.view_settings.view_transform = "Standard"
+scene.view_settings.look = "None"
+scene.view_settings.exposure = 0
+scene.view_settings.gamma = 1
+scene.eevee.taa_render_samples = 64
 
 # ── Create one image empty, reuse for all frames ──────────────────────────────
 bpy.ops.object.empty_add(type="IMAGE", location=(0, 0, 0))
@@ -111,18 +105,6 @@ for mat in gp_obj.data.materials:
         gp_mat.color       = tuple(stroke_color)
         gp_mat.show_stroke = True
 
-# ── Noise modifier (modifiers.new avoids GPU hang in background mode) ─────────
-noise_mod = gp_obj.modifiers.new("Noise", "GREASE_PENCIL_NOISE")
-noise_mod.factor           = noise_factor
-noise_mod.factor_strength  = noise_strength
-noise_mod.factor_thickness = noise_thickness
-noise_mod.factor_uvs       = noise_uvs
-noise_mod.noise_scale      = noise_scale
-noise_mod.noise_offset     = noise_offset
-noise_mod.seed             = noise_seed
-noise_mod.step             = noise_step
-noise_mod.use_random       = noise_random
-
 # ── Camera ────────────────────────────────────────────────────────────────────
 cam_data = bpy.data.cameras.new("Camera")
 cam_data.type        = "ORTHO"
@@ -133,11 +115,14 @@ scene.camera = cam_obj
 cam_obj.location       = (0, 0, 10)
 cam_obj.rotation_euler = (0, 0, 0)
 
-# ── Save blend ────────────────────────────────────────────────────────────────
+# ── Save blend then render in the same session to avoid GP blend_read crash ───
 scene.render.filepath = os.path.join(output_dir, "frame_")
 print("[fae_blender] saving blend...", flush=True)
 bpy.ops.wm.save_as_mainfile(filepath=blend_file)
 print("[fae_blender] setup done", flush=True)
+print("[fae_blender] rendering...", flush=True)
+bpy.ops.render.render(animation=True, write_still=True)
+print("[fae_blender] render done", flush=True)
 '''
 
 
@@ -166,15 +151,6 @@ class BlenderGPTraceNode:
                 "stroke_color":    ("STRING", {"default": "#FFFFFF"}),
                 "stroke_radius":   ("FLOAT",  {"default": 0.05,  "min": 0.001, "max": 1.0,   "step": 0.001}),
                 "show_fill":       ("BOOLEAN",{"default": False, "tooltip": "Only enable for silhouette/mask input — hangs on line art"}),
-                "noise_factor":    ("FLOAT",  {"default": 0.5,  "min": 0.0,    "max": 10.0,  "step": 0.01,  "tooltip": "Position noise amount"}),
-                "noise_strength":  ("FLOAT",  {"default": 0.0,  "min": 0.0,    "max": 10.0,  "step": 0.01,  "tooltip": "Strength noise amount"}),
-                "noise_thickness": ("FLOAT",  {"default": 0.0,  "min": 0.0,    "max": 10.0,  "step": 0.01,  "tooltip": "Thickness noise amount"}),
-                "noise_uvs":       ("FLOAT",  {"default": 0.0,  "min": 0.0,    "max": 10.0,  "step": 0.01,  "tooltip": "UV noise amount"}),
-                "noise_scale":     ("FLOAT",  {"default": 1.0,  "min": 0.0,    "max": 100.0, "step": 0.1,   "tooltip": "Scale of the noise"}),
-                "noise_offset":    ("FLOAT",  {"default": 0.0,  "min": -100.0, "max": 100.0, "step": 0.1,   "tooltip": "Offset of the noise"}),
-                "noise_seed":      ("INT",    {"default": 1,    "min": 0,      "max": 9999}),
-                "noise_step":      ("INT",    {"default": 4,    "min": 1,      "max": 100,   "tooltip": "Frames between noise steps"}),
-                "noise_random":    ("BOOLEAN",{"default": True,                "tooltip": "Randomize noise every step"}),
                 "blend_save_path": ("STRING", {"default": os.path.expanduser("~/Documents/ComfyUI_Blender")}),
             }
         }
@@ -185,8 +161,7 @@ class BlenderGPTraceNode:
     CATEGORY = "fae/blender"
 
     def trace(self, images, fps, threshold, fill_color, stroke_color, stroke_radius,
-              show_fill, noise_factor, noise_strength, noise_thickness, noise_uvs,
-              noise_scale, noise_offset, noise_seed, noise_step, noise_random, blend_save_path):
+              show_fill, blend_save_path):
         n, h, w, c = images.shape
         imgs_np = images.cpu().numpy()
         _log = logging.getLogger(__name__)
@@ -235,28 +210,14 @@ class BlenderGPTraceNode:
                 str(stroke_radius),
                 json.dumps(stroke_rgba),
                 str(show_fill),
-                str(noise_factor), str(noise_strength), str(noise_thickness), str(noise_uvs),
-                str(noise_scale), str(noise_offset), str(noise_seed), str(noise_step),
-                str(noise_random),
             ]
             rc, log = _run(setup_cmd)
             if rc != 0:
-                raise RuntimeError(f"Blender setup failed:\n{log}")
-
-            # Step 2: render via CLI
-            render_cmd = [
-                BLENDER, "--background", blend_file,
-                "--render-output", os.path.join(output_dir, "frame_"),
-                "--render-format", "PNG",
-                "--render-anim",
-            ]
-            rc2, log2 = _run(render_cmd)
-            if rc2 != 0:
-                raise RuntimeError(f"Blender render failed:\n{log2}")
+                raise RuntimeError(f"Blender render failed:\n{log}")
 
             rendered = sorted(f for f in os.listdir(output_dir) if f.endswith(".png"))
             if not rendered:
-                raise RuntimeError(f"Blender produced no output frames.\n{log2}")
+                raise RuntimeError(f"Blender produced no output frames.\n{log}")
 
             out_frames, out_masks = [], []
             for fname in rendered:
