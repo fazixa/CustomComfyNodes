@@ -151,3 +151,49 @@ The opposite of Pipo Align Composite: instead of placing generated content onto 
 **Outputs**
 - `composited` — `generated_frames` with `mask` region replaced by aligned `original_frames` content, per frame
 - `restored_layer` — The aligned original content on its own, as RGBA with alpha = the warped & feathered `mask`. Connect to Save Image to export transparent PNGs
+
+---
+
+## SAM2 Segment
+**Category:** `fae/segmentation`
+
+Segments a still image with SAM2. The node draws the image on a canvas widget — left-click to add a foreground point, right-click for background — and previews the resulting mask live as you click. `Backspace` undoes the last point, `Esc` clears them.
+
+Requires a local SAM2 checkout at `/Users/fae/Documents/Projects/sam2` (see `SAM2_ROOT` in `sam2_node.py`) with the `sam2.1_hiera_tiny` checkpoint downloaded. Runs on CUDA, MPS, or CPU, whichever is available.
+
+**Inputs**
+| Input | Description |
+|---|---|
+| `image` | Image from the input directory, with upload |
+| `points_json` | Click points, written by the canvas widget |
+| `labels_json` | Per-point label (1 = foreground, 0 = background), written by the widget |
+
+**Outputs**
+- `image` — The source image
+- `mask` — Binary mask for the highest-scoring SAM2 proposal
+- `masked_image` — Source image with the mask applied
+
+---
+
+## SAM2 Segment Video
+**Category:** `fae/segmentation`
+
+Tracks a subject through a video with SAM2's video predictor. Scrub to a frame, click the subject, and the node propagates that selection across every frame when the graph runs.
+
+Takes a `VIDEO` input, so it can sit downstream of Load Video or of a generator like Seedance 2.0 Generate. When nothing is connected it falls back to the `video_file` picker.
+
+Frame previews resolve in two ways: if the chain traces back to a node that names a file, the widget reads frames immediately; if the video doesn't exist yet (generated video), queue the graph once and the widget previews from the path the node resolved on that run. Note that the click preview runs the single-frame *image* predictor — propagation across frames happens when the graph executes.
+
+**Inputs**
+| Input | Description |
+|---|---|
+| `video` | *(optional)* `VIDEO` input to segment |
+| `video_file` | *(optional)* Video from the input directory, used when `video` isn't connected |
+| `annotate_frame` | Frame the click points refer to, set by the scrubber |
+| `points_json` | Click points, written by the canvas widget |
+| `labels_json` | Per-point label (1 = foreground, 0 = background), written by the widget |
+
+**Outputs**
+- `frames` — Every frame of the video as an image batch
+- `masks` — Propagated mask per frame
+- `masked_frames` — Frames with their mask applied

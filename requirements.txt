@@ -1,4 +1,4 @@
-# torch, numpy and Pillow ship with ComfyUI and are deliberately not pinned here.
+# torch, numpy, Pillow and av ship with ComfyUI and are deliberately not pinned.
 opencv-python
 scipy
 replicate
@@ -10,3 +10,5 @@ deface
 #   Blender      /Applications/Blender.app  — Blender GP Trace
 #   ffmpeg       on PATH                    — video I/O
 #   REPLICATE_API_TOKEN env var             — Seedance 2.0 Generate
+#   SAM2 checkout + sam2.1_hiera_tiny checkpoint — SAM2 Segment nodes.
+#     Path is SAM2_ROOT in sam2_node.py; it's added to sys.path at import.
