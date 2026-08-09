@@ -1,4 +1,5 @@
 import { app } from "../../scripts/app.js";
+import { api } from "../../scripts/api.js";
 
 const FG_COLOR = "#00e676";
 const BG_COLOR = "#ff1744";
@@ -333,8 +334,50 @@ app.registerExtension({
     // current binding when clicked. serialize=false keeps it out of
     // widgets_values (the slot is still held, so nothing shifts).
     let loadSource = async () => {};
-    const loadBtn = node.addWidget("button", LOAD_LABEL, null, () => loadSource());
+    const loadBtn = node.addWidget("button", LOAD_LABEL, null, () => onLoadClick());
     loadBtn.serialize = false;
+
+    // Set once the chain has actually run, so previews come from the path this
+    // node resolved rather than a filename read off an upstream loader. They
+    // differ whenever something between them alters the video — a Video Slice
+    // trim, say — and only the resolved path reflects that.
+    let preferResolvedPath = false;
+
+    // Queue this node the way Save Video's run button does: partial execution
+    // walks its dependencies, so whatever feeds `video` runs, and this node
+    // then caches the video it resolved for the frame endpoints to read.
+    function runUpstream() {
+      return new Promise((resolve, reject) => {
+        const cleanup = () => {
+          api.removeEventListener("execution_success", ok);
+          api.removeEventListener("execution_error", fail);
+        };
+        const ok = () => { cleanup(); resolve(); };
+        const fail = (e) => { cleanup(); reject(new Error(e?.detail?.exception_message ?? "execution error")); };
+        api.addEventListener("execution_success", ok);
+        api.addEventListener("execution_error", fail);
+        app.queuePrompt(0, 1, [String(node.id)]).catch((err) => { cleanup(); reject(err); });
+      });
+    }
+
+    async function onLoadClick() {
+      const connected = node.inputs?.some((i) => i.name === "video" && i.link != null);
+      if (connected) {
+        loadBtn.name = "Running…";
+        node.setDirtyCanvas(true);
+        try {
+          await runUpstream();
+          preferResolvedPath = true;
+        } catch (err) {
+          console.error("[sam2] run failed:", err);
+          setPlaceholder("Run failed — see console");
+        } finally {
+          loadBtn.name = LOAD_LABEL;
+          node.setDirtyCanvas(true);
+        }
+      }
+      await loadSource();
+    }
 
     const { canvas, redraw, setPlaceholder } = buildCanvasWidget(node, state, {
       placeholderText: "Connect a video or pick a file above",
@@ -425,10 +468,13 @@ app.registerExtension({
     function resolveSource() {
       const slot = node.inputs?.findIndex((i) => i.name === "video");
       if (slot >= 0 && node.inputs[slot].link != null) {
-        const up = upstreamVideoFile(node);
-        if (up) return { ...up, nodeId: null, note: "" };
+        if (!preferResolvedPath) {
+          // Cheap approximate preview on connect, before anything has run.
+          const up = upstreamVideoFile(node);
+          if (up) return { ...up, nodeId: null, note: "" };
+        }
         return { filename: "", subfolder: "", nodeId: node.id,
-                 note: "Queue once, then hit Load video" };
+                 note: "Hit Load video to run the graph feeding this input" };
       }
       const w = node.widgets?.find((x) => x.name === "video_file");
       const v = w?.value;
@@ -471,9 +517,9 @@ app.registerExtension({
         slider.value = 0;
         frameLabel.textContent = `0 / ${state.frameCount - 1}`;
       } catch {
-        // No file behind the socket yet — it appears after one execution.
+        // No file behind the socket yet — it appears once the chain has run.
         state.img = null;
-        setPlaceholder(next.note || "Queue once, then hit Load video");
+        setPlaceholder(next.note || "Hit Load video to run the graph feeding this input");
         return;
       } finally {
         loadBtn.name = LOAD_LABEL;

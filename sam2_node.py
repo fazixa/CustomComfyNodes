@@ -256,6 +256,11 @@ class SAM2SegmentVideoNode:
     FUNCTION = "segment_video"
     CATEGORY = "fae/segmentation"
 
+    # Partial execution only targets output nodes (see validate_prompt), and the
+    # widget's Load video button queues this node on its own to pull the
+    # incoming video through whatever generates it.
+    OUTPUT_NODE = True
+
     @classmethod
     def VALIDATE_INPUTS(cls, video_file=None):
         # Opting out of ComfyUI's combo check: video_file is only a fallback for
