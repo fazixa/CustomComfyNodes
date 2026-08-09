@@ -1,0 +1,12 @@
+# torch, numpy and Pillow ship with ComfyUI and are deliberately not pinned here.
+opencv-python
+scipy
+replicate
+
+# Used only by the standalone face_blur.py helper (not imported by __init__.py).
+deface
+
+# Not pip-installable, required at runtime by some nodes:
+#   Blender      /Applications/Blender.app  — Blender GP Trace
+#   ffmpeg       on PATH                    — video I/O
+#   REPLICATE_API_TOKEN env var             — Seedance 2.0 Generate
