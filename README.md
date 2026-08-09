@@ -184,6 +184,8 @@ Takes a `VIDEO` input, so it can sit downstream of Load Video or of a generator 
 
 Frame previews resolve in two ways: if the chain traces back to a node that names a file, the widget reads frames immediately; if the video doesn't exist yet (generated video), queue the graph once and the widget previews from the path the node resolved on that run. Note that the click preview runs the single-frame *image* predictor — propagation across frames happens when the graph executes.
 
+**⟳ Load video** pulls the incoming video in on demand. The widget also refreshes on its own when you connect or disconnect the socket, but the button is what you want after queueing a generator upstream, or when the upstream loader was pointed at a different file — neither of those changes the connection, so nothing else would trigger a reload.
+
 **Inputs**
 | Input | Description |
 |---|---|

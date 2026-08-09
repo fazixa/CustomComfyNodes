@@ -219,6 +219,7 @@ function loadImage(value, state, setFrame) {
 // ── Video node ───────────────────────────────────────────────────────────────
 
 const VIDEO_EXT_RE = /\.(mp4|mov|avi|mkv|webm)$/i;
+const LOAD_LABEL = "⟳ Load video";
 
 // The frontend attaches its own media preview for video_upload combos, which
 // lands on top of our frame canvas. We draw the frame ourselves, so refuse it.
@@ -327,6 +328,14 @@ app.registerExtension({
       },
     };
 
+    // Added before the canvas so it sits above the frame preview. Assigned for
+    // real further down, once setPlaceholder exists; the closure reads the
+    // current binding when clicked. serialize=false keeps it out of
+    // widgets_values (the slot is still held, so nothing shifts).
+    let loadSource = async () => {};
+    const loadBtn = node.addWidget("button", LOAD_LABEL, null, () => loadSource());
+    loadBtn.serialize = false;
+
     const { canvas, redraw, setPlaceholder } = buildCanvasWidget(node, state, {
       placeholderText: "Connect a video or pick a file above",
       async predictFn(s) {
@@ -419,20 +428,20 @@ app.registerExtension({
         const up = upstreamVideoFile(node);
         if (up) return { ...up, nodeId: null, note: "" };
         return { filename: "", subfolder: "", nodeId: node.id,
-                 note: "Queue once, then scrub to annotate" };
+                 note: "Queue once, then hit Load video" };
       }
       const w = node.widgets?.find((x) => x.name === "video_file");
       const v = w?.value;
       const filename = typeof v === "string" ? v : (v?.filename ?? v?.name ?? "");
       if (!filename) {
         return { filename: "", subfolder: "", nodeId: null,
-                 note: "Connect a video or pick a file above" };
+                 note: "Connect a video or pick a file, then hit Load video" };
       }
       return { filename, subfolder: typeof v === "object" ? v?.subfolder ?? "" : "",
                nodeId: null, note: "" };
     }
 
-    async function loadSource() {
+    loadSource = async function () {
       stripPreview();
 
       const next = resolveSource();
@@ -451,6 +460,8 @@ app.registerExtension({
         return;
       }
 
+      loadBtn.name = "Loading…";
+      node.setDirtyCanvas(true);
       try {
         const res = await fetch(`/fae/sam2/video_info?${new URLSearchParams(src)}`);
         if (!res.ok) throw new Error(`video_info ${res.status}`);
@@ -462,12 +473,15 @@ app.registerExtension({
       } catch {
         // No file behind the socket yet — it appears after one execution.
         state.img = null;
-        setPlaceholder(next.note || "Queue once, then scrub to annotate");
+        setPlaceholder(next.note || "Queue once, then hit Load video");
         return;
+      } finally {
+        loadBtn.name = LOAD_LABEL;
+        node.setDirtyCanvas(true);
       }
 
       goToFrame(0);
-    }
+    };
 
     const fileWidget = node.widgets?.find((w) => w.name === "video_file");
     if (fileWidget) {
