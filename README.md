@@ -154,6 +154,37 @@ The opposite of Pipo Align Composite: instead of placing generated content onto 
 
 ---
 
+### Alignment settings (both Pipo Align nodes)
+
+| Input | Description |
+|---|---|
+| `align_model` | How much motion the fit is allowed. `similarity` (default) = pan, rotate, uniform zoom. `affine` adds shear and non-uniform stretch. `homography` adds perspective |
+| `smoothing` | Frames averaged over when smoothing the alignment across the clip. `0`/`1` disables it |
+| `lock_alignment` | Collapse to one transform for the whole clip |
+| `max_features` | SIFT keypoints kept, strongest first |
+| `match_count` | Cap on matches kept after the ratio test. `0` = keep all |
+
+**Which model for which footage.** Pick the least freedom that covers the shot — every unused degree of freedom gets spent fitting noise, which comes out as per-frame wobble.
+
+- **`similarity`** — the right default. Correct whenever the two shots differ by a pan, a roll, or a zoom: locked-off originals, tripod shots, handheld with no real parallax, and anything generated from a still.
+- **`affine`** — when the generated video is stretched relative to the original, e.g. a non-uniform resize or an aspect change somewhere in the chain.
+- **`homography`** — only when the camera genuinely moves through the scene and flat surfaces visibly keystone: a dolly past a wall, a strong angle change, a tilt across a floor. Needs well-spread matches across depth to be worth the extra freedom.
+
+**Smoothing.** Raise it when the background is static or barely moving and the composite still swims. Lower it (or set `0`) when the camera moves fast, since a wide window makes the alignment lag real motion. `lock_alignment` is the end of that scale — use it only when *neither* side moves, such as a still photo as the original; it removes alignment flicker completely, and will drift visibly if the footage does move.
+
+Measured on a 97-frame shot with a still photo as the original, so the correct transform is identical on every frame and all movement is error:
+
+| Setting | Frame-to-frame flicker | Worst |
+|---|---|---|
+| `homography`, `match_count=50`, no smoothing (old behaviour) | 2.55 px | 8.10 px |
+| `similarity`, ratio test, no smoothing | 0.50 px | 1.57 px |
+| `similarity`, ratio test, `smoothing=5` | 0.14 px | 0.38 px |
+| `similarity`, ratio test, `lock_alignment` | 0.00 px | 0.00 px |
+
+Note `max_features` above ~2000 makes alignment *less* steady, not more: SIFT keeps keypoints strongest-first, so raising the cap admits weak, poorly localised ones. `match_count` is now a cap on matches that already passed a ratio test, and `0` (keep all) is normally best.
+
+---
+
 ## SAM2 Segment
 **Category:** `fae/segmentation`
 
