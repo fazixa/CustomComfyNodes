@@ -1,6 +1,12 @@
 import numpy as np
 import torch
-from scipy.ndimage import binary_dilation, binary_erosion, distance_transform_edt, sobel
+from scipy.ndimage import (
+    binary_dilation,
+    binary_erosion,
+    distance_transform_edt,
+    label,
+    sobel,
+)
 
 
 def _rgb_to_hsv(img):
@@ -45,6 +51,25 @@ def _detect_mask(img, hue_center, hue_tol, sat_min, sat_max, val_min, val_max, e
         mask = mask & (neighbors >= float(erosion))
 
     return mask
+
+
+def _despeckle(mask, min_area):
+    """Drop mask islands smaller than min_area pixels.
+
+    Thresholding picks up isolated stray pixels, which are invisible in the mask
+    itself but not downstream: the outline pass rings every connected component,
+    so a single stray pixel dilates into a solid box of ink many times its size.
+    Erosion can't stand in for this — it thins the whole silhouette rather than
+    removing islands.
+    """
+    if min_area <= 1 or not mask.any():
+        return mask
+    lbl, n = label(mask)
+    if n < 2:
+        return mask
+    areas = np.bincount(lbl.ravel())
+    areas[0] = 0  # background is never kept on its own account
+    return areas[lbl] >= min_area
 
 
 def _build_outline(mask, outline_width, sharpness, outline_color_rgb):
@@ -189,6 +214,8 @@ class PinkExtractorNode:
                 "val_min":       ("FLOAT", {"default": 0.65, "min": 0.0,  "max": 1.0,  "step": 0.01}),
                 "val_max":       ("FLOAT", {"default": 1.00, "min": 0.0,  "max": 1.0,  "step": 0.01}),
                 "erosion":       ("INT",   {"default": 1,    "min": 0,    "max": 4,    "step": 1}),
+                "despeckle":     ("INT",   {"default": 16,   "min": 0,    "max": 512,  "step": 1,
+                                            "tooltip": "Discard detected islands smaller than this many pixels. Stray pixels are invisible in the mask but the outline rings every island, turning one pixel into a box of ink. 0 = off."}),
                 "outline_width": ("FLOAT", {"default": 3.0,  "min": 1.0,  "max": 50.0, "step": 0.5,
                                             "tooltip": "Outline width when Pipo is largest in the clip (closest to camera)"}),
                 "sharpness":     ("FLOAT", {"default": 1.0,  "min": 0.0,  "max": 2.0,  "step": 0.05}),
@@ -209,13 +236,14 @@ class PinkExtractorNode:
 
     def extract(self, images, hue_center, hue_tolerance, sat_min, sat_max,
                 val_min, val_max, erosion, outline_width, sharpness, outline_color,
-                dynamic_outline, min_scale, smoothing):
+                dynamic_outline, min_scale, smoothing, despeckle=16):
 
         outline_rgb = _hex_to_rgb(outline_color)
         imgs_np = images.cpu().numpy()  # [N, H, W, C]
 
-        masks_np = [_detect_mask(img[..., :3], hue_center, hue_tolerance,
-                                  sat_min, sat_max, val_min, val_max, erosion)
+        masks_np = [_despeckle(_detect_mask(img[..., :3], hue_center, hue_tolerance,
+                                            sat_min, sat_max, val_min, val_max, erosion),
+                               despeckle)
                     for img in imgs_np]
 
         widths = np.full(len(masks_np), outline_width, dtype=np.float32)
@@ -264,6 +292,8 @@ class ColorExtractorNode:
                 "sat_tolerance": ("FLOAT", {"default": 0.15, "min": 0.01,  "max": 0.5,  "step": 0.01}),
                 "val_tolerance": ("FLOAT", {"default": 0.15, "min": 0.01,  "max": 0.5,  "step": 0.01}),
                 "erosion":       ("INT",   {"default": 1,    "min": 0,     "max": 4,    "step": 1}),
+                "despeckle":     ("INT",   {"default": 16,   "min": 0,     "max": 512,  "step": 1,
+                                            "tooltip": "Discard detected islands smaller than this many pixels. Stray pixels are invisible in the mask but the outline rings every island, turning one pixel into a box of ink. 0 = off."}),
                 "outline_width": ("FLOAT", {"default": 3.0,  "min": 1.0,   "max": 50.0, "step": 0.5}),
                 "sharpness":     ("FLOAT", {"default": 1.0,  "min": 0.0,   "max": 2.0,  "step": 0.05}),
                 "outline_color": ("STRING", {"default": "#1a1a2e"}),
@@ -280,13 +310,15 @@ class ColorExtractorNode:
 
     def extract(self, images, target_color, hue_tolerance, sat_tolerance, val_tolerance,
                 erosion, outline_width, sharpness, outline_color,
-                dynamic_outline, min_scale, smoothing):
+                dynamic_outline, min_scale, smoothing, despeckle=16):
 
         outline_rgb = _hex_to_rgb(outline_color)
         imgs_np = images.cpu().numpy()
 
-        masks_np = [_detect_mask_around_color(img[..., :3], target_color, hue_tolerance,
-                                              sat_tolerance, val_tolerance, erosion)
+        masks_np = [_despeckle(_detect_mask_around_color(img[..., :3], target_color,
+                                                         hue_tolerance, sat_tolerance,
+                                                         val_tolerance, erosion),
+                               despeckle)
                     for img in imgs_np]
 
         widths = np.full(len(masks_np), outline_width, dtype=np.float32)

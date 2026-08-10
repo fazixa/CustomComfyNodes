@@ -18,6 +18,7 @@ Detects and extracts a pink-colored subject from an image or video batch using H
 | `sat_min / sat_max` | Saturation bounds |
 | `val_min / val_max` | Value (brightness) bounds |
 | `erosion` | Noise removal passes (0–4) |
+| `despeckle` | Discard detected islands smaller than this many pixels (0 = off). Stray thresholded pixels are invisible in the mask, but the outline pass rings *every* island, so one pixel becomes a box of ink several times its size — the little squares that show up along arms and edges. `erosion` can't do this job; it thins the whole silhouette instead of removing islands |
 | `outline_width` | Outline width in pixels (when `dynamic_outline` is on, this is the width at Pipo's largest/closest frame) |
 | `sharpness` | Sobel edge sharpness for the outline |
 | `outline_color` | Hex color for the outline stroke |
