@@ -212,6 +212,8 @@ Requires a local SAM2 checkout at `/Users/fae/Documents/Projects/sam2` (see `SAM
 
 Tracks a subject through a video with SAM2's video predictor. Scrub to a frame, click the subject, and the node propagates that selection across every frame when the graph runs.
 
+Propagation runs in both directions, so you can annotate on whichever frame shows the subject most clearly and the whole clip is covered — not just the frames after it.
+
 Takes a `VIDEO` input, so it can sit downstream of Load Video or of a generator like Seedance 2.0 Generate. When nothing is connected it falls back to the `video_file` picker.
 
 Frame previews resolve in two ways: if the chain traces back to a node that names a file, the widget reads frames immediately; if the video doesn't exist yet (generated video), queue the graph once and the widget previews from the path the node resolved on that run. Note that the click preview runs the single-frame *image* predictor — propagation across frames happens when the graph executes.

@@ -327,10 +327,16 @@ class SAM2SegmentVideoNode:
                 normalize_coords=True,
             )
 
+            # propagate_in_video walks one direction from the annotated frame, so
+            # a single pass leaves everything before it unsegmented. Run it both
+            # ways to cover the whole clip, as the SAM2 demo does. Reverse from
+            # frame 0 is a no-op — it returns an empty processing order.
             frame_masks = {}
             with torch.inference_mode():
-                for frame_idx, obj_ids, masks in predictor.propagate_in_video(inference_state):
-                    frame_masks[frame_idx] = (masks > 0)[0, 0].cpu().numpy().astype(np.float32)
+                for reverse in (False, True):
+                    for frame_idx, obj_ids, masks in predictor.propagate_in_video(
+                            inference_state, reverse=reverse):
+                        frame_masks[frame_idx] = (masks > 0)[0, 0].cpu().numpy().astype(np.float32)
         finally:
             predictor.reset_state(inference_state)
 
