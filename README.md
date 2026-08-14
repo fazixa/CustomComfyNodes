@@ -186,6 +186,32 @@ Note `max_features` above ~2000 makes alignment *less* steady, not more: SIFT ke
 
 ---
 
+## Color Match
+**Category:** `fae/image`
+
+Grades one shot onto another using a colour they share. Sample the same real-world colour — Pipo's pink — as it appears in each shot; the difference between those two samples describes the difference between the shots, and that correction is applied to **every pixel**, carrying the whole frame across rather than repainting the pink alone.
+
+Both colour fields have a **Pick** button using the screen eyedropper, so you can sample straight off a preview image in the graph.
+
+Hue moves by the shortest rotation around the wheel. Saturation and brightness scale by ratio, so the sampled colour lands on the target exactly. Brightening is eased onto 1.0 rather than clipped — a plain ratio would push everything above the sampled value past white and flatten it, losing all highlight separation.
+
+**Inputs**
+| Input | Description |
+|---|---|
+| `images` | The footage to correct — normally the generated shot |
+| `source_color` | The shared colour as it appears in `images` |
+| `target_color` | The same colour as it appears in the footage you're matching to — normally the original |
+| `hue_amount` | How much of the hue rotation to take (0 = leave hue alone, 1 = full match) |
+| `saturation_amount` | How much of the saturation correction to take |
+| `value_amount` | How much of the brightness correction to take |
+
+**Outputs**
+- `images` — The corrected batch, same shape as the input. An alpha channel passes through untouched
+
+The per-channel amounts exist because a full match isn't always what you want: matching hue alone often reads better than dragging brightness along with it, when the two shots were lit differently on purpose.
+
+---
+
 ## SAM2 Segment
 **Category:** `fae/segmentation`
 
