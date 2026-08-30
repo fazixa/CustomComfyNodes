@@ -212,6 +212,53 @@ The per-channel amounts exist because a full match isn't always what you want: m
 
 ---
 
+## Mask Grain
+**Category:** `fae/mask`
+
+Breaks a mask up with noise so the alpha stops looking machine-cut. A matte straight out of SAM2 or the Pink Extractor has a clean, uniform edge that reads as digital next to hand-drawn artwork; grain gives it a stippled, drawn-on quality — and animated, the shimmer sits naturally against a boil.
+
+The noise is blurred white noise renormalised back to a uniform distribution, so `amount` means the same thing at every `grain_size` — coarsening the specks changes their size, not how hard they bite.
+
+The four knobs are deliberately independent — `density` is *how many*, `amount` is *how hard*, `grain_size` is *how big*, `hardness` is *how sharp*:
+
+- **`density`** is the fraction of the area that becomes grain at all; the rest is left at exactly the input value. Because the noise field is renormalised to a true uniform distribution, that fraction is exact — `density=0.2` touches 20.0% of the pixels.
+- **`amount`** runs past 1.0 on purpose. At 1.0 only the extremes of the noise reach all the way through, so most specks come out mid-grey; pushing higher saturates the middle of the distribution too and the dots go solid black.
+- **`hardness`** flattens the ramp from speck centre to nothing into a flat-topped dot, without changing coverage.
+- **`bias`** splits `density` between grain that eats in and grain that adds out, again leaving total coverage alone.
+
+**Inputs**
+| Input | Description |
+|---|---|
+| `mask` | The mask to roughen |
+| `amount` | How hard each speck bites — **not** how many. 1.0 just reaches through; above 1 the specks saturate, so they land solid black instead of grey |
+| `density` | How much of the area is grain at all. 0.1 = sparse scattered specks, 1.0 = grain everywhere |
+| `grain_size` | Speck size in px. 0 = single-pixel noise, higher = coarser clumps |
+| `hardness` | 0 = soft cloudy grain, 1 = hard on/off specks (stipple / dissolve) |
+| `bias` | −1 the grain only eats into the mask, 0 both ways, +1 only adds specks outside |
+| `region` | `edge` only the boundary breaks up · `edge+inside` the whole silhouette plus a band fading past its edge · `inside` / `outside` one side only · `whole` everywhere |
+| `edge_width` | `region=edge` / `edge+inside`: how many px past the boundary the grain reaches |
+| `seed` | Noise seed |
+| `lock_to_screen` | On: one grain pattern pinned to the frame — the specks never move or re-randomise. Off: new grain every frame (film-grain shimmer) |
+
+**Outputs**
+- `mask` — The grainy mask, same shape as the input
+
+**Starting points**
+| Look | Settings |
+|---|---|
+| Roughened edge, solid interior | `region=edge`, `amount≈0.6`, `grain_size≈2`, `edge_width≈8` |
+| Sparse scattered holes | `region=edge+inside`, `density≈0.15`, `amount≈2`, `hardness≈0.6` |
+| Grainy silhouette, ragged edge | `region=edge+inside`, `amount≈2`, `grain_size≈2`, `edge_width≈8` |
+| Dry-brush / stipple edge | `region=edge`, `amount=1.0`, `hardness≈0.9`, `grain_size≈1.5` |
+| Eaten-away matte | `region=inside`, `bias=-1`, `amount≈0.4`, `grain_size≈4` |
+| Solid black dots, no grey | any region, `amount≥2` (or `hardness≈0.9`) |
+| Overall film grain | `region=whole`, `amount≈0.15`, `grain_size≈1`, `lock_to_screen=false` |
+| Paper / print texture | `region=edge+inside`, `lock_to_screen=true`, `density≈0.3`, `grain_size≈1.5` |
+
+`lock_to_screen` decides whether the grain lives in time or only in space. Off, a fresh field is drawn each frame and the specks boil — right when the grain is meant to read as film or as a hand redrawing every cel. On, one field is generated in frame coordinates and reused for the whole batch, so a given pixel of the frame gets the same speck every time: the texture sits still like paper or a lens artefact while the subject moves through it. Turn it on whenever the mask feeds something that has to stay stable frame to frame — a tracked composite, or anything downstream that thresholds the mask.
+
+---
+
 ## SAM2 Segment
 **Category:** `fae/segmentation`
 

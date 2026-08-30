@@ -9,6 +9,7 @@ from .seedance import SeedanceGenerateNode
 from .outline_roughen import OutlineRoughenNode
 from .mask_fill_gaps import MaskFillGapsNode
 from .mask_track import MaskTrackNode
+from .mask_grain import MaskGrainNode
 from .color_match import ColorMatchNode
 from .sam2_node import SAM2SegmentNode, SAM2SegmentVideoNode
 from . import sam2_routes  # noqa: F401 — registers /fae/sam2/* on import
@@ -32,6 +33,7 @@ NODE_CLASS_MAPPINGS = {
     "OutlineRoughen": OutlineRoughenNode,
     "MaskFillGaps": MaskFillGapsNode,
     "MaskTrack": MaskTrackNode,
+    "MaskGrain": MaskGrainNode,
     "ColorMatch": ColorMatchNode,
     "SAM2Segment": SAM2SegmentNode,
     "SAM2SegmentVideo": SAM2SegmentVideoNode,
@@ -56,6 +58,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "OutlineRoughen": "Outline Roughen",
     "MaskFillGaps": "Mask Fill Gaps",
     "MaskTrack": "Mask Track",
+    "MaskGrain": "Mask Grain",
     "ColorMatch": "Color Match",
     "SAM2Segment": "SAM2 Segment",
     "SAM2SegmentVideo": "SAM2 Segment Video",
